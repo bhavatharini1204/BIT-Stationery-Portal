@@ -1,122 +1,150 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect, useState } from "react";
+
+import Login from "./pages/Login";
+import ChangePassword from "./pages/ChangePassword";
+
+import StudentDashboard from "./pages/StudentDashboard";
+import HODDashboard from "./pages/HODDashboard";
+import TechnicianDashboard from "./pages/TechnicianDashboard";
+import StorepersonDashboard from "./pages/StorepersonDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [user, setUser] = useState(null);
+
+  /* =========================================
+     LOAD SAVED USER
+  ========================================= */
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem("stationeryUser");
+
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch {
+        localStorage.removeItem("stationeryUser");
+      }
+    }
+  }, []);
+
+  /* =========================================
+     LOGIN
+  ========================================= */
+
+  function handleLogin(loggedInUser) {
+    setUser(loggedInUser);
+
+    localStorage.setItem("stationeryUser", JSON.stringify(loggedInUser));
+  }
+
+  /* =========================================
+     PASSWORD CHANGED
+  ========================================= */
+
+  function handlePasswordChanged(updatedUser) {
+    const finalUser = {
+      ...user,
+      ...updatedUser,
+      mustChangePassword: false,
+    };
+
+    setUser(finalUser);
+
+    localStorage.setItem("stationeryUser", JSON.stringify(finalUser));
+  }
+
+  /* =========================================
+     LOGOUT
+  ========================================= */
+
+  function handleLogout() {
+    setUser(null);
+
+    localStorage.removeItem("stationeryUser");
+  }
+
+  /* =========================================
+     NOT LOGGED IN
+  ========================================= */
+
+  if (!user) {
+    return <Login onLogin={handleLogin} />;
+  }
+
+  /* =========================================
+     FORCE STAFF PASSWORD CHANGE
+  ========================================= */
+
+  if (
+    user.role !== "student" &&
+    user.role !== "admin" &&
+    user.mustChangePassword
+  ) {
+    return (
+      <ChangePassword user={user} onPasswordChanged={handlePasswordChanged} />
+    );
+  }
+
+  /* =========================================
+     ADMIN
+  ========================================= */
+
+  if (user.role === "admin") {
+    return <AdminDashboard user={user} onLogout={handleLogout} />;
+  }
+
+  /* =========================================
+     HOD
+  ========================================= */
+
+  if (user.role === "hod") {
+    return <HODDashboard user={user} onLogout={handleLogout} />;
+  }
+
+  /* =========================================
+     TECHNICIAN
+  ========================================= */
+
+  if (user.role === "technician") {
+    return <TechnicianDashboard user={user} onLogout={handleLogout} />;
+  }
+
+  /* =========================================
+     STOREPERSON
+  ========================================= */
+
+  if (user.role === "storeperson") {
+    return <StorepersonDashboard user={user} onLogout={handleLogout} />;
+  }
+
+  /* =========================================
+     STUDENT
+  ========================================= */
+
+  if (user.role === "student") {
+    return <StudentDashboard user={user} onLogout={handleLogout} />;
+  }
+
+  /* =========================================
+     UNKNOWN ROLE
+  ========================================= */
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app-shell">
+      <div className="container">
+        <div className="error-box">
+          <strong>Invalid account role</strong>
 
-      <div className="ticks"></div>
+          <p>Your account does not have a valid portal role.</p>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+          <button className="primary-btn" onClick={handleLogout}>
+            Return to Login
+          </button>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      </div>
+    </div>
+  );
 }
 
-export default App
+export default App;
