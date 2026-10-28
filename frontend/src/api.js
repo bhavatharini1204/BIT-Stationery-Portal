@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api`;
 
 async function request(endpoint, options = {}) {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -235,7 +235,10 @@ export async function getStorepersonAssignments(storepersonEmail) {
   );
 }
 
-export async function dispatchCollegeAssignment(assignmentId, storepersonEmail) {
+export async function dispatchCollegeAssignment(
+  assignmentId,
+  storepersonEmail,
+) {
   return request(`/storeperson/assignments/${assignmentId}/dispatch`, {
     method: "PUT",
 
@@ -245,7 +248,12 @@ export async function dispatchCollegeAssignment(assignmentId, storepersonEmail) 
   });
 }
 
-export async function updateStoreProductStock(productId, storepersonEmail, stock, active) {
+export async function updateStoreProductStock(
+  productId,
+  storepersonEmail,
+  stock,
+  active,
+) {
   return request(`/storeperson/products/${productId}/stock`, {
     method: "PUT",
 
