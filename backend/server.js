@@ -429,16 +429,43 @@ app.post("/api/admin/staff", async (req, res) => {
       });
     }
 
-    if (role === "hod" || role === "technician") {
-      const existingDepartmentRole = await User.findOne({
+    if (role === "hod") {
+      const existingHOD = await User.findOne({
         department: departmentName,
-        role,
+        role: "hod",
         active: true,
       });
 
-      if (existingDepartmentRole) {
+      if (existingHOD) {
         return res.status(409).json({
-          message: `This department already has an active ${role}.`,
+          message: `This department already has an active HOD (${existingHOD.name}). Only 1 HOD is allowed per department.`,
+        });
+      }
+    }
+
+    if (role === "technician") {
+      const technicianCount = await User.countDocuments({
+        department: departmentName,
+        role: "technician",
+        active: true,
+      });
+
+      if (technicianCount >= 2) {
+        return res.status(409).json({
+          message: `This department already has ${technicianCount} active Technicians. Maximum 2 Technicians are allowed per department.`,
+        });
+      }
+    }
+
+    if (role === "storeperson") {
+      const storeCount = await User.countDocuments({
+        role: "storeperson",
+        active: true,
+      });
+
+      if (storeCount >= 2) {
+        return res.status(409).json({
+          message: `The campus already has ${storeCount} active Storepersons. Maximum 2 Storepersons are allowed.`,
         });
       }
     }
@@ -529,19 +556,27 @@ app.get("/api/stationery", async (req, res) => {
 });
 
 /* =====================================================
-   ADMIN — ADD STATIONERY
+   STOREPERSON — ADD STATIONERY
 ===================================================== */
 
 app.post("/api/stationery", async (req, res) => {
   try {
-    const { adminEmail, name, category, price, stock, lowStockLimit, source } =
+    const {
+      storepersonEmail,
+      name,
+      category,
+      price,
+      stock,
+      lowStockLimit,
+      source,
+    } =
       req.body;
 
-    const admin = await getUserByEmail(adminEmail);
+    const storeperson = await getUserByEmail(storepersonEmail);
 
-    if (!admin || admin.role !== "admin") {
+    if (!storeperson || storeperson.role !== "storeperson") {
       return res.status(403).json({
-        message: "Only Admin can add stationery.",
+        message: "Only Storeperson can add stationery stock.",
       });
     }
 
@@ -587,19 +622,27 @@ app.post("/api/stationery", async (req, res) => {
 });
 
 /* =====================================================
-   ADMIN — UPDATE STATIONERY
+   STOREPERSON — UPDATE STATIONERY
 ===================================================== */
 
 app.put("/api/stationery/:id", async (req, res) => {
   try {
-    const { adminEmail, name, category, price, stock, lowStockLimit, active } =
+    const {
+      storepersonEmail,
+      name,
+      category,
+      price,
+      stock,
+      lowStockLimit,
+      active,
+    } =
       req.body;
 
-    const admin = await getUserByEmail(adminEmail);
+    const storeperson = await getUserByEmail(storepersonEmail);
 
-    if (!admin || admin.role !== "admin") {
+    if (!storeperson || storeperson.role !== "storeperson") {
       return res.status(403).json({
-        message: "Only Admin can update stationery.",
+        message: "Only Storeperson can update stationery inventory.",
       });
     }
 
@@ -651,16 +694,16 @@ app.put("/api/stationery/:id", async (req, res) => {
 });
 
 /* =====================================================
-   ADMIN — REMOVE STATIONERY
+   STOREPERSON — REMOVE STATIONERY
 ===================================================== */
 
 app.delete("/api/stationery/:id", async (req, res) => {
   try {
-    const admin = await getUserByEmail(req.query.adminEmail);
+    const storeperson = await getUserByEmail(req.query.storepersonEmail);
 
-    if (!admin || admin.role !== "admin") {
+    if (!storeperson || storeperson.role !== "storeperson") {
       return res.status(403).json({
-        message: "Only Admin can remove stationery.",
+        message: "Only Storeperson can remove stationery.",
       });
     }
 
@@ -949,11 +992,78 @@ app.put("/api/hod/assignments/:id/finalize", async (req, res) => {
 
     assignment.finalized = true;
     assignment.finalizedAt = new Date();
+    assignment.dispatchStatus = "Pending Dispatch";
 
     await assignment.save();
 
+    /*
+     * Automatic notifications to Storeperson,
+     * Department Technician, and Students.
+     */
+
+    const totalPacks = assignment.items.reduce(
+      (sum, item) => sum + item.quantity * students.length,
+      0,
+    );
+    const itemSummary = assignment.items
+      .map((i) => `${i.name} × ${i.quantity}`)
+      .join(", ");
+
+    const storepersons = await User.find({
+      role: "storeperson",
+      active: true,
+    });
+
+    for (const sp of storepersons) {
+      await Notification.create({
+        type: "hod_allotment",
+        targetRole: "storeperson",
+        title: `College Allotment: ${assignment.department} (Sem ${assignment.semester})`,
+        message: `HOD finalized allotment for ${students.length} students (${totalPacks} total units: ${itemSummary}). Please prepare and dispatch to Department Technician.`,
+        department: assignment.department,
+        student: null,
+        createdBy: hod._id,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        active: true,
+      });
+    }
+
+    const deptTechnicians = await User.find({
+      role: "technician",
+      department: assignment.department,
+      active: true,
+    });
+
+    for (const tech of deptTechnicians) {
+      await Notification.create({
+        type: "hod_allotment",
+        targetRole: "technician",
+        title: `Stationery Allotment Approved (Sem ${assignment.semester})`,
+        message: `HOD finalized stationery distribution for ${students.length} students. Storeperson has been requested to dispatch stock.`,
+        department: assignment.department,
+        student: null,
+        createdBy: hod._id,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        active: true,
+      });
+    }
+
+    for (const student of students) {
+      await Notification.create({
+        type: "hod_allotment",
+        targetRole: "student",
+        title: `Stationery Kit Allocated (Sem ${assignment.semester})`,
+        message: `Your college stationery kit (${itemSummary}) has been approved by HOD. Your technician will announce the collection schedule shortly.`,
+        department: assignment.department,
+        student: student._id,
+        createdBy: hod._id,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        active: true,
+      });
+    }
+
     res.json({
-      message: "Assignment finalized successfully.",
+      message: "Assignment finalized successfully. Storeperson and Technician notified.",
       studentCount: students.length,
       technician: publicUser(technician),
     });
@@ -1051,7 +1161,19 @@ app.get("/api/technician/distribution", async (req, res) => {
       studentName: 1,
     });
 
-    res.json(records);
+    const students = await User.find({
+      _id: { $in: [...new Set(records.map((record) => record.student.toString()))] },
+    }).select("registerNumber");
+    const registerNumbers = new Map(
+      students.map((student) => [student._id.toString(), student.registerNumber]),
+    );
+
+    res.json(
+      records.map((record) => ({
+        ...record.toObject(),
+        registerNumber: registerNumbers.get(record.student.toString()) || "",
+      })),
+    );
   } catch (error) {
     console.error("Technician distribution error:", error);
 
@@ -1166,12 +1288,90 @@ app.put("/api/technician/distribution/:id/received", async (req, res) => {
 });
 
 /* =====================================================
-   TECHNICIAN — SEND TEMPORARY MESSAGE
+   TECHNICIAN — MARK ALL ITEMS FOR STUDENT RECEIVED
+===================================================== */
+
+app.put(
+  "/api/technician/distribution/student/:studentId/received",
+  async (req, res) => {
+    try {
+      const { technicianEmail } = req.body;
+
+      const technician = await getUserByEmail(technicianEmail);
+
+      if (!technician || technician.role !== "technician") {
+        return res.status(403).json({
+          message: "Only Technician can mark distribution received.",
+        });
+      }
+
+      const uncollectedRecords = await Distribution.find({
+        student: req.params.studentId,
+        department: technician.department,
+        status: "Not Collected",
+      });
+
+      if (uncollectedRecords.length === 0) {
+        return res.status(400).json({
+          message: "No pending stationery items to collect for this student.",
+        });
+      }
+
+      await Distribution.updateMany(
+        {
+          student: req.params.studentId,
+          department: technician.department,
+          status: "Not Collected",
+        },
+        {
+          $set: {
+            status: "Received",
+            receivedAt: new Date(),
+            receivedBy: technician._id,
+          },
+        },
+      );
+
+      const itemsSummary = uncollectedRecords
+        .map((r) => `${r.item.name} × ${r.item.quantity}`)
+        .join(", ");
+
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+      await Notification.create({
+        type: "stationery_received",
+        targetRole: "student",
+        title: "Stationery Package Collected",
+        message: `Your college stationery (${itemsSummary}) was verified and marked collected by ${technician.name}.`,
+        department: technician.department,
+        student: req.params.studentId,
+        createdBy: technician._id,
+        expiresAt,
+        active: true,
+      });
+
+      res.json({
+        message: `Marked ${uncollectedRecords.length} items as collected.`,
+        updatedCount: uncollectedRecords.length,
+      });
+    } catch (error) {
+      console.error("Student bulk mark received error:", error);
+
+      res.status(500).json({
+        message: "Unable to update student distribution.",
+      });
+    }
+  },
+);
+
+/* =====================================================
+   TECHNICIAN — BROADCAST CROWD ALERT / NOTIFICATION
 ===================================================== */
 
 app.post("/api/technician/notifications", async (req, res) => {
   try {
-    const { technicianEmail, title, message, expiresAt } = req.body;
+    const { technicianEmail, title, message, alertLevel, timeSlot, expiresAt } =
+      req.body;
 
     const technician = await getUserByEmail(technicianEmail);
 
@@ -1181,41 +1381,33 @@ app.post("/api/technician/notifications", async (req, res) => {
       });
     }
 
-    if (!title || !message || !expiresAt) {
+    if (!title || !message) {
       return res.status(400).json({
-        message: "Title, message and expiry time are required.",
+        message: "Title and message are required.",
       });
     }
 
-    const expiry = new Date(expiresAt);
-
-    if (Number.isNaN(expiry.getTime())) {
-      return res.status(400).json({
-        message: "Invalid expiry time.",
-      });
-    }
-
-    if (expiry <= new Date()) {
-      return res.status(400).json({
-        message: "Expiry time must be in the future.",
-      });
+    let expiry;
+    if (expiresAt) {
+      expiry = new Date(expiresAt);
+      if (Number.isNaN(expiry.getTime()) || expiry <= new Date()) {
+        expiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      }
+    } else {
+      expiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours default
     }
 
     const notification = await Notification.create({
       type: "technician_message",
-
+      targetRole: "student",
+      alertLevel: alertLevel || "info",
+      timeSlot: timeSlot ? String(timeSlot).trim() : null,
       title: String(title).trim(),
-
       message: String(message).trim(),
-
       department: technician.department,
-
       student: null,
-
       createdBy: technician._id,
-
       expiresAt: expiry,
-
       active: true,
     });
 
@@ -1233,7 +1425,7 @@ app.post("/api/technician/notifications", async (req, res) => {
 });
 
 /* =====================================================
-   TECHNICIAN — VIEW OWN ACTIVE MESSAGES
+   TECHNICIAN — VIEW DEPARTMENT NOTIFICATIONS
 ===================================================== */
 
 app.get("/api/technician/notifications", async (req, res) => {
@@ -1246,14 +1438,18 @@ app.get("/api/technician/notifications", async (req, res) => {
       });
     }
 
+    const now = new Date();
+
     const notifications = await Notification.find({
       department: technician.department,
-      createdBy: technician._id,
-      type: "technician_message",
       active: true,
       expiresAt: {
-        $gt: new Date(),
+        $gt: now,
       },
+      $or: [
+        { createdBy: technician._id },
+        { targetRole: "technician" },
+      ],
     }).sort({
       createdAt: -1,
     });
@@ -1349,7 +1545,11 @@ app.get("/api/student/notifications", async (req, res) => {
         {
           student: student._id,
         },
-
+        {
+          department: student.department,
+          targetRole: { $in: ["student", "all"] },
+          student: null,
+        },
         {
           type: "technician_message",
           department: student.department,
@@ -1657,6 +1857,177 @@ app.put("/api/storeperson/orders/:id/status", async (req, res) => {
 
     res.status(500).json({
       message: "Unable to update order.",
+    });
+  }
+});
+
+/* =====================================================
+   STOREPERSON — VIEW COLLEGE ALLOTMENTS (FROM HODs)
+===================================================== */
+
+app.get("/api/storeperson/assignments", async (req, res) => {
+  try {
+    const storeperson = await getUserByEmail(req.query.storepersonEmail);
+
+    if (!storeperson || storeperson.role !== "storeperson") {
+      return res.status(403).json({
+        message: "Only Storeperson can view college assignments.",
+      });
+    }
+
+    const assignments = await SemesterAssignment.find({
+      finalized: true,
+    })
+      .populate("createdBy", "name email department")
+      .populate("dispatchedBy", "name email")
+      .sort({
+        createdAt: -1,
+      });
+
+    const enriched = await Promise.all(
+      assignments.map(async (assignment) => {
+        const studentCount = await User.countDocuments({
+          role: "student",
+          department: assignment.department,
+          semester: assignment.semester,
+          active: true,
+        });
+
+        const technician = await getDepartmentTechnician(assignment.department);
+
+        return {
+          ...assignment.toObject(),
+          studentCount,
+          technician: technician ? publicUser(technician) : null,
+        };
+      }),
+    );
+
+    res.json(enriched);
+  } catch (error) {
+    console.error("Storeperson assignments error:", error);
+
+    res.status(500).json({
+      message: "Unable to load college assignments.",
+    });
+  }
+});
+
+/* =====================================================
+   STOREPERSON — DISPATCH COLLEGE ALLOTMENT STOCK
+===================================================== */
+
+app.put("/api/storeperson/assignments/:id/dispatch", async (req, res) => {
+  try {
+    const { storepersonEmail } = req.body;
+
+    const storeperson = await getUserByEmail(storepersonEmail);
+
+    if (!storeperson || storeperson.role !== "storeperson") {
+      return res.status(403).json({
+        message: "Only Storeperson can dispatch college assignments.",
+      });
+    }
+
+    const assignment = await SemesterAssignment.findById(req.params.id);
+
+    if (!assignment || !assignment.finalized) {
+      return res.status(404).json({
+        message: "Finalized college assignment not found.",
+      });
+    }
+
+    assignment.dispatchStatus = "Dispatched to Department";
+    assignment.dispatchedAt = new Date();
+    assignment.dispatchedBy = storeperson._id;
+
+    await assignment.save();
+
+    // Notify Department Technicians
+    const deptTechnicians = await User.find({
+      role: "technician",
+      department: assignment.department,
+      active: true,
+    });
+
+    const itemsSummary = assignment.items
+      .map((i) => `${i.name} × ${i.quantity}`)
+      .join(", ");
+
+    for (const tech of deptTechnicians) {
+      await Notification.create({
+        type: "storeperson_dispatch",
+        targetRole: "technician",
+        title: `Stock Dispatched: ${assignment.department} (Sem ${assignment.semester})`,
+        message: `Storeperson (${storeperson.name}) has dispatched the stationery materials (${itemsSummary}) to your department. Ready for distribution.`,
+        department: assignment.department,
+        student: null,
+        createdBy: storeperson._id,
+        expiresAt: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+        active: true,
+      });
+    }
+
+    res.json({
+      message: "Materials marked as dispatched to department technician.",
+      assignment,
+    });
+  } catch (error) {
+    console.error("Storeperson dispatch error:", error);
+
+    res.status(500).json({
+      message: "Unable to dispatch assignment materials.",
+    });
+  }
+});
+
+/* =====================================================
+   STOREPERSON — UPDATE STORE PRODUCT STOCK / STATUS
+===================================================== */
+
+app.put("/api/storeperson/products/:id/stock", async (req, res) => {
+  try {
+    const { storepersonEmail, stock, active } = req.body;
+
+    const storeperson = await getUserByEmail(storepersonEmail);
+
+    if (!storeperson || storeperson.role !== "storeperson") {
+      return res.status(403).json({
+        message: "Only Storeperson can update store inventory.",
+      });
+    }
+
+    const product = await Stationery.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({
+        message: "Product not found.",
+      });
+    }
+
+    if (stock !== undefined) {
+      const stockNum = Number(stock);
+      if (Number.isNaN(stockNum) || stockNum < 0) {
+        return res.status(400).json({ message: "Stock must be 0 or greater." });
+      }
+      product.stock = stockNum;
+    }
+
+    if (active !== undefined) {
+      product.active = Boolean(active);
+    }
+
+    await product.save();
+
+    res.json({
+      message: "Product stock updated.",
+      product,
+    });
+  } catch (error) {
+    console.error("Storeperson product stock update error:", error);
+
+    res.status(500).json({
+      message: "Unable to update product stock.",
     });
   }
 });

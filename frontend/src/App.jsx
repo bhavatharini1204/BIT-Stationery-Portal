@@ -1,32 +1,25 @@
-import { useEffect, useState } from "react";
-
+import { useState } from "react";
 import Login from "./pages/Login";
 import ChangePassword from "./pages/ChangePassword";
-
 import StudentDashboard from "./pages/StudentDashboard";
 import HODDashboard from "./pages/HODDashboard";
 import TechnicianDashboard from "./pages/TechnicianDashboard";
 import StorepersonDashboard from "./pages/StorepersonDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
-
 function App() {
-  const [user, setUser] = useState(null);
-
-  /* =========================================
-     LOAD SAVED USER
-  ========================================= */
-
-  useEffect(() => {
+  const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem("stationeryUser");
 
     if (savedUser) {
       try {
-        setUser(JSON.parse(savedUser));
+        return JSON.parse(savedUser);
       } catch {
         localStorage.removeItem("stationeryUser");
       }
     }
-  }, []);
+
+    return null;
+  });
 
   /* =========================================
      LOGIN

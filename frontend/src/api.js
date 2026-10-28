@@ -84,23 +84,6 @@ export async function addStationery(productData) {
   });
 }
 
-export async function updateStationery(id, productData) {
-  return request(`/stationery/${id}`, {
-    method: "PUT",
-
-    body: JSON.stringify(productData),
-  });
-}
-
-export async function deleteStationery(id, adminEmail) {
-  return request(
-    `/stationery/${id}?adminEmail=${encodeURIComponent(adminEmail)}`,
-    {
-      method: "DELETE",
-    },
-  );
-}
-
 /* =========================================
    HOD
 ========================================= */
@@ -149,6 +132,16 @@ export async function getTechnicianDistribution(technicianEmail) {
 
 export async function markItemReceived(distributionId, technicianEmail) {
   return request(`/technician/distribution/${distributionId}/received`, {
+    method: "PUT",
+
+    body: JSON.stringify({
+      technicianEmail,
+    }),
+  });
+}
+
+export async function markStudentAllReceived(studentId, technicianEmail) {
+  return request(`/technician/distribution/student/${studentId}/received`, {
     method: "PUT",
 
     body: JSON.stringify({
@@ -230,6 +223,36 @@ export async function updateOrderStatus(orderId, storepersonEmail, status) {
     body: JSON.stringify({
       storepersonEmail,
       status,
+    }),
+  });
+}
+
+export async function getStorepersonAssignments(storepersonEmail) {
+  return request(
+    `/storeperson/assignments?storepersonEmail=${encodeURIComponent(
+      storepersonEmail,
+    )}`,
+  );
+}
+
+export async function dispatchCollegeAssignment(assignmentId, storepersonEmail) {
+  return request(`/storeperson/assignments/${assignmentId}/dispatch`, {
+    method: "PUT",
+
+    body: JSON.stringify({
+      storepersonEmail,
+    }),
+  });
+}
+
+export async function updateStoreProductStock(productId, storepersonEmail, stock, active) {
+  return request(`/storeperson/products/${productId}/stock`, {
+    method: "PUT",
+
+    body: JSON.stringify({
+      storepersonEmail,
+      stock,
+      active,
     }),
   });
 }

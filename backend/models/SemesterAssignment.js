@@ -57,6 +57,23 @@ const semesterAssignmentSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    dispatchStatus: {
+      type: String,
+      enum: ["Pending Dispatch", "Dispatched to Department", "Received by Technician"],
+      default: "Pending Dispatch",
+    },
+
+    dispatchedAt: {
+      type: Date,
+      default: null,
+    },
+
+    dispatchedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   {
     timestamps: true,

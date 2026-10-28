@@ -370,30 +370,6 @@ function Login({ onLogin }) {
             </button>
 
           </div>
-
-
-          {/* STAFF INFORMATION */}
-
-          <div className="login-test-info">
-
-            <strong>
-              Staff access
-            </strong>
-
-            <p>
-              HOD, Technician,
-              Storeperson and Admin
-              accounts are created by
-              the Admin.
-            </p>
-
-            <p>
-              Students must register
-              using their college email.
-            </p>
-
-          </div>
-
         </div>
 
       )}

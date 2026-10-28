@@ -5,9 +5,6 @@ import {
   getStaff,
   createStaff,
   getStationery,
-  addStationery,
-  updateStationery,
-  deleteStationery,
   getAdminDistribution,
   getAdminOrders,
 } from "../api";
@@ -39,18 +36,9 @@ function AdminDashboard({ user, onLogout }) {
 
   const [temporaryPassword, setTemporaryPassword] = useState("");
 
-  const [productForm, setProductForm] = useState({
-    name: "",
-    category: "",
-    price: "",
-    stock: "",
-    lowStockLimit: "20",
-    source: "store",
-  });
-
-  async function loadDashboard() {
+  const loadDashboard = async () => {
     try {
-      setLoading(true);
+      setSaving(true);
       setError("");
 
       const [
@@ -61,34 +49,58 @@ function AdminDashboard({ user, onLogout }) {
         orderData,
       ] = await Promise.all([
         getAdminOverview(user.email),
-
         getStaff(user.email),
-
         getStationery(),
-
         getAdminDistribution(user.email),
-
         getAdminOrders(user.email),
       ]);
 
       setOverview(overviewData);
-
       setStaff(staffData);
-
       setProducts(productData);
-
       setDistribution(distributionData);
-
       setOrders(orderData);
-    } catch (error) {
-      setError(error.message || "Unable to load Admin dashboard.");
+    } catch (err) {
+      setError(err.message || "Unable to refresh Admin dashboard.");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
-  }
+  };
 
   useEffect(() => {
-    loadDashboard();
+    let isMounted = true;
+    async function init() {
+      try {
+        const [
+          overviewData,
+          staffData,
+          productData,
+          distributionData,
+          orderData,
+        ] = await Promise.all([
+          getAdminOverview(user.email),
+          getStaff(user.email),
+          getStationery(),
+          getAdminDistribution(user.email),
+          getAdminOrders(user.email),
+        ]);
+        if (!isMounted) return;
+        setOverview(overviewData);
+        setStaff(staffData);
+        setProducts(productData);
+        setDistribution(distributionData);
+        setOrders(orderData);
+      } catch (err) {
+        if (isMounted)
+          setError(err.message || "Unable to load Admin dashboard.");
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+    init();
+    return () => {
+      isMounted = false;
+    };
   }, [user.email]);
 
   /* =========================================
@@ -143,135 +155,6 @@ function AdminDashboard({ user, onLogout }) {
       await loadDashboard();
     } catch (error) {
       setError(error.message || "Unable to create staff account.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  /* =========================================
-     PRODUCTS
-  ========================================= */
-
-  function handleProductChange(field, value) {
-    setProductForm((current) => ({
-      ...current,
-      [field]: value,
-    }));
-  }
-
-  async function handleAddProduct(event) {
-    event.preventDefault();
-
-    setError("");
-    setMessage("");
-
-    if (
-      !productForm.name ||
-      !productForm.category ||
-      productForm.price === "" ||
-      productForm.stock === ""
-    ) {
-      setError("Please fill all product fields.");
-      return;
-    }
-
-    try {
-      setSaving(true);
-
-      const result = await addStationery({
-        adminEmail: user.email,
-
-        name: productForm.name,
-
-        category: productForm.category,
-
-        price: Number(productForm.price),
-
-        stock: Number(productForm.stock),
-
-        lowStockLimit: Number(productForm.lowStockLimit),
-
-        source: productForm.source,
-      });
-
-      setMessage(result.message);
-
-      setProductForm({
-        name: "",
-        category: "",
-        price: "",
-        stock: "",
-        lowStockLimit: "20",
-        source: "store",
-      });
-
-      await loadDashboard();
-    } catch (error) {
-      setError(error.message || "Unable to add product.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleStockUpdate(product) {
-    const newStock = window.prompt(
-      `Enter new stock for ${product.name}:`,
-      String(product.stock),
-    );
-
-    if (newStock === null) {
-      return;
-    }
-
-    const stock = Number(newStock);
-
-    if (!Number.isInteger(stock) || stock < 0) {
-      setError("Stock must be a valid non-negative whole number.");
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setError("");
-      setMessage("");
-
-      const result = await updateStationery(product._id, {
-        adminEmail: user.email,
-
-        stock,
-      });
-
-      setMessage(result.message);
-
-      await loadDashboard();
-    } catch (error) {
-      setError(error.message || "Unable to update stock.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleRemoveProduct(product) {
-    const confirmed = window.confirm(
-      `Remove ${product.name} from the active inventory?`,
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setError("");
-      setMessage("");
-
-      const result = await deleteStationery(product._id, user.email);
-
-      setMessage(result.message);
-
-      await loadDashboard();
-    } catch (error) {
-      setError(error.message || "Unable to remove product.");
     } finally {
       setSaving(false);
     }
@@ -337,19 +220,27 @@ function AdminDashboard({ user, onLogout }) {
           TOP BAR
       ================================= */}
 
-      <div className="topbar">
-        <strong>BIT Stationery Portal</strong>
+      <header className="topbar">
+        <div className="topbar-brand">
+          <div className="brand-crest">BIT</div>
+          <div className="brand-info">
+            <strong>Bannari Amman Institute of Technology</strong>
+            <span>Super Administrator Console</span>
+          </div>
+        </div>
 
         <div className="top-actions">
-          <span>{user.name}</span>
+          <div className="user-badge">
+            <div className="user-avatar">{user.name.charAt(0)}</div>
+            <span>{user.name}</span>
+            <span className="user-role-pill">Admin</span>
+          </div>
 
-          <span>System Admin</span>
-
-          <button className="ghost-btn" onClick={onLogout}>
+          <button className="ghost-btn btn-sm" onClick={onLogout}>
             Logout
           </button>
         </div>
-      </div>
+      </header>
 
       <main className="container">
         {/* =================================
@@ -358,22 +249,20 @@ function AdminDashboard({ user, onLogout }) {
 
         <div className="hero-card">
           <div>
-            <p className="eyebrow">SYSTEM MANAGEMENT</p>
+            <p className="eyebrow">SYSTEM MANAGEMENT & AUDIT</p>
 
-            <h1>Admin Dashboard</h1>
+            <h1>Institutional Administration Console</h1>
 
             <p className="muted">
-              Overall management of college stationery, store inventory, staff
-              and transactions.
+              Centralized oversight of department quotas, staff provisioning,
+              college warehouse allocations, and retail store inventory.
             </p>
           </div>
 
           <div className="mini-stats">
-            <span>{overview?.totalStudents || 0} Students</span>
-
-            <span>{overview?.totalStock || 0} Stock</span>
-
-            <span>{overview?.lowStockCount || 0} Low Stock</span>
+            <span>{overview?.totalStudents || 0} Enrolled Students</span>
+            <span>{overview?.totalStock || 0} Total Units in Stock</span>
+            <span>{overview?.lowStockCount || 0} Low Stock Alerts</span>
           </div>
         </div>
 
@@ -388,16 +277,49 @@ function AdminDashboard({ user, onLogout }) {
         {/* TEMP PASSWORD */}
 
         {temporaryPassword && (
-          <div className="success-box">
-            <strong>Staff account created</strong>
+          <div
+            className="success-box"
+            style={{ border: "2px solid var(--bit-emerald)" }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <strong>✓ Staff Account Provisioned Successfully</strong>
+              <button
+                type="button"
+                className="secondary-btn btn-sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(temporaryPassword);
+                  alert("Temporary password copied to clipboard!");
+                }}
+              >
+                📋 Copy Password
+              </button>
+            </div>
 
-            <p>Temporary password:</p>
+            <p style={{ margin: "6px 0" }}>Temporary One-Time Password:</p>
 
-            <code>{temporaryPassword}</code>
+            <code
+              style={{
+                fontSize: "16px",
+                padding: "4px 10px",
+                background: "#eee8f7",
+                borderRadius: "6px",
+                display: "inline-block",
+                fontWeight: "800",
+                color: "var(--bit-navy-dark)",
+              }}
+            >
+              {temporaryPassword}
+            </code>
 
-            <p className="muted">
-              Give this password securely to the staff member. They should
-              change it after their first login.
+            <p className="muted" style={{ marginTop: "6px" }}>
+              Provide this password securely to the staff member. They will be
+              required to change their password on first login.
             </p>
           </div>
         )}
@@ -713,114 +635,6 @@ function AdminDashboard({ user, onLogout }) {
 
         {activeTab === "inventory" && (
           <>
-            <div className="panel">
-              <div className="section-heading">
-                <div>
-                  <h2>Add Product</h2>
-
-                  <p className="muted">
-                    Admin manages both college and store inventory.
-                  </p>
-                </div>
-              </div>
-
-              <form onSubmit={handleAddProduct}>
-                <div className="form-grid">
-                  <div>
-                    <label>Product Name</label>
-
-                    <input
-                      type="text"
-                      value={productForm.name}
-                      onChange={(event) =>
-                        handleProductChange("name", event.target.value)
-                      }
-                      placeholder="Product name"
-                    />
-                  </div>
-
-                  <div>
-                    <label>Category</label>
-
-                    <input
-                      type="text"
-                      value={productForm.category}
-                      onChange={(event) =>
-                        handleProductChange("category", event.target.value)
-                      }
-                      placeholder="Academic / Writing / Office"
-                    />
-                  </div>
-
-                  <div>
-                    <label>Price</label>
-
-                    <input
-                      type="number"
-                      min="0"
-                      value={productForm.price}
-                      onChange={(event) =>
-                        handleProductChange("price", event.target.value)
-                      }
-                      placeholder="0"
-                    />
-                  </div>
-
-                  <div>
-                    <label>Stock</label>
-
-                    <input
-                      type="number"
-                      min="0"
-                      value={productForm.stock}
-                      onChange={(event) =>
-                        handleProductChange("stock", event.target.value)
-                      }
-                      placeholder="0"
-                    />
-                  </div>
-
-                  <div>
-                    <label>Low Stock Limit</label>
-
-                    <input
-                      type="number"
-                      min="0"
-                      value={productForm.lowStockLimit}
-                      onChange={(event) =>
-                        handleProductChange("lowStockLimit", event.target.value)
-                      }
-                    />
-                  </div>
-
-                  <div>
-                    <label>Product Type</label>
-
-                    <select
-                      value={productForm.source}
-                      onChange={(event) =>
-                        handleProductChange("source", event.target.value)
-                      }
-                    >
-                      <option value="store">Store Product</option>
-
-                      <option value="college">College Provided</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-actions">
-                  <button
-                    type="submit"
-                    className="primary-btn"
-                    disabled={saving}
-                  >
-                    {saving ? "Adding..." : "Add Product"}
-                  </button>
-                </div>
-              </form>
-            </div>
-
             {/* COLLEGE INVENTORY */}
 
             <div className="panel">
@@ -864,21 +678,6 @@ function AdminDashboard({ user, onLogout }) {
                           : "Available"}
                       </span>
 
-                      <button
-                        className="secondary-btn"
-                        disabled={saving}
-                        onClick={() => handleStockUpdate(product)}
-                      >
-                        Update Stock
-                      </button>
-
-                      <button
-                        className="danger-btn"
-                        disabled={saving}
-                        onClick={() => handleRemoveProduct(product)}
-                      >
-                        Remove
-                      </button>
                     </div>
                   </div>
                 ))
@@ -927,21 +726,6 @@ function AdminDashboard({ user, onLogout }) {
                           : "Available"}
                       </span>
 
-                      <button
-                        className="secondary-btn"
-                        disabled={saving}
-                        onClick={() => handleStockUpdate(product)}
-                      >
-                        Update Stock
-                      </button>
-
-                      <button
-                        className="danger-btn"
-                        disabled={saving}
-                        onClick={() => handleRemoveProduct(product)}
-                      >
-                        Remove
-                      </button>
                     </div>
                   </div>
                 ))
